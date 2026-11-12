@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini-Arr - Contrôle à Distance</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #121212; color: #e0e0e0; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: auto; background: #1e1e1e; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        h1 { color: #bb86fc; text-align: center; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #b0bec5; }
+        input, select, button { width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #333; background: #2d2d2d; color: #fff; box-sizing: border-box; }
+        button { background: #bb86fc; color: #121212; font-weight: bold; cursor: pointer; margin-top: 10px; border: none; }
+        button:hover { background: #9965f4; }
+        .result-card { background: #252525; padding: 15px; margin-top: 15px; border-radius: 6px; border-left: 4px solid #bb86fc; }
+        .torrent-item { display: flex; justify-content: space-between; align-items: center; background: #2d2d2d; padding: 10px; margin-top: 8px; border-radius: 4px; }
+        .btn-dl { background: #03dac6; color: #121212; width: auto; padding: 6px 12px; margin: 0; }
+        .btn-dl:hover { background: #018786; }
+        #loading { text-align: center; color: #03dac6; display: none; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎬 Mini-Arr Control Center</h1>
+    
+    <div class="form-group">
+        <label for="searchQuery">Titre du film :</label>
+        <input type="text" id="searchQuery" placeholder="Ex: Interstellar, Inception...">
+    </div>
+
+    <div class="form-group">
+        <label for="langueSelect">Langue :</label>
+        <select id="langueSelect">
+            <option value="VO">VO (Version Originale / YTS)</option>
+            <option value="Français">Français (VF / TrueFrench)</option>
+        </select>
+    </div>
+
+    <button onclick="rechercherFilm()">Rechercher</button>
+    <div id="loading">Recherche en cours sur votre PC via Cloudflare...</div>
+
+    <div id="resultsArea"></div>
+</div>
+
+<script>
+    // ⚠️ Remplace ceci par ton URL Cloudflare active et ta clé secrète
+    const CLOUDFLARE_URL = "https://premier-retailer-aerial-compared.trycloudflare.com";
+    const API_KEY = "mon_secret_super_securise_123";
+
+    async function rechercherFilm() {
+        const query = document.getElementById("searchQuery").value.trim();
+        const langue = document.getElementById("langueSelect").value;
+        const resultsArea = document.getElementById("resultsArea");
+        const loading = document.getElementById("loading");
+
+        if (!query) {
+            alert("Veuillez entrer un titre de film !");
+            return;
+        }
+
+        resultsArea.innerHTML = "";
+        loading.style.display = "block";
+
+        try {
+            const response = await fetch(`${CLOUDFLARE_URL}/api/search?q=${encodeURIComponent(query)}&langue=${encodeURIComponent(langue)}`, {
+                method: "GET",
+                headers: {
+                    "X-API-Key": API_KEY
+                }
+            });
+
+            const data = await response.json();
+            loading.style.display = "none";
+
+            if (data.status === "success") {
+                let film = data.film;
+                let html = `
+                    <div class="result-card">
+                        <h3>${film.Title} (${film.Year})</h3>
+                        <p>Flux torrents disponibles :</p>
+                `;
+
+                if (data.flux && data.flux.length > 0) {
+                    data.flux.forEach(t => {
+                        let tailleGo = (t.size / (1024*1024*1024)).toFixed(2);
+                        html += `
+                            <div class="torrent-item">
+                                <span><strong>${t.name}</strong><br><small>Taille: ${tailleGo} Go | Seeders: ${t.seeders || 'N/A'}</small></span>
+                                <button class="btn-dl" onclick="lancerTelechargement('${encodeURIComponent(t.magnet)}')">Télécharger</button>
+                            </div>
+                        `;
+                    });
+                } else {
+                    html += `<p style="color: #ffb74d;">Aucun flux torrent valide trouvé pour ce film.</p>`;
+                }
+
+                html += `</div>`;
+                resultsArea.innerHTML = html;
+            } else {
+                resultsArea.innerHTML = `<p style="color: #cf6679;">Erreur : ${data.message}</p>`;
+            }
+        } catch (error) {
+            loading.style.display = "none";
+            resultsArea.innerHTML = `<p style="color: #cf6679;">Impossible de contacter le serveur local (Vérifiez que le tunnel Cloudflare et Uvicorn tournent bien).</p>`;
+            console.error(error);
+        }
+    }
+
+    async function lancerTelechargement(magnetEncoded) {
+        const magnet = decodeURIComponent(magnetEncoded);
+        try {
+            const response = await fetch(`${CLOUDFLARE_URL}/api/download`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-API-Key": API_KEY
+                },
+                body: JSON.stringify({ magnet: magnet })
+            });
+
+            const data = await response.json();
+            if (data.status === "success") {
+                alert("✅ Téléchargement lancé avec succès sur votre PC via aria2c !");
+            } else {
+                alert("❌ Erreur lors du lancement : " + data.detail);
+            }
+        } catch (error) {
+            alert("Erreur de communication avec le serveur.");
+            console.error(error);
+        }
+    }
+</script>
+
+</body>
+</html>
